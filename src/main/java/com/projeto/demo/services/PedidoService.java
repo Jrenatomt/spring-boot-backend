@@ -40,33 +40,19 @@ public class PedidoService {
 	public Pedido insert(Pedido obj) {
 
 		obj.setId(null);
-
 		obj.setInstante(new Date());
-
 		obj.getPagamento().setEstadoPagamento(EstadoPagamento.PENDENTE);
-
 		obj.getPagamento().setPedido(obj);
-
 		if (obj.getPagamento() instanceof PagamentoComBoleto) {
-
 			PagamentoComBoleto pagto = (PagamentoComBoleto) obj.getPagamento();
-
 			boletoService.preencherPagamentoComBoleto(pagto, obj.getInstante());
-
 		}
-
 		obj = repository.save(obj);
-
 		pagamentoRepository.save(obj.getPagamento());
-
 		for (ItemPedido ip : obj.getItens()) {
-
 			ip.setDisconto(0.0);
-
 			ip.setPreco(produtoService.find(ip.getProduto().getId()).getPreco());
-
 			ip.setPedido(obj);
-
 		}
 
 		itemPedidoRepository.saveAll(obj.getItens());
