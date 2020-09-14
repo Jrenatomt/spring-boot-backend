@@ -4,9 +4,13 @@ import java.util.Date;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort.Direction;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.projeto.demo.domain.Cliente;
 import com.projeto.demo.domain.ItemPedido;
 import com.projeto.demo.domain.PagamentoComBoleto;
 import com.projeto.demo.domain.Pedido;
@@ -14,6 +18,8 @@ import com.projeto.demo.domain.enums.EstadoPagamento;
 import com.projeto.demo.repositories.ItemPedidoRepository;
 import com.projeto.demo.repositories.PagamentoRepository;
 import com.projeto.demo.repositories.PedidoRepository;
+import com.projeto.demo.security.UserSS;
+import com.projeto.demo.services.exceptions.AuthorizationException;
 import com.projeto.demo.services.exceptions.ObjectNotFoundException;
 
 @Service
@@ -21,14 +27,25 @@ public class PedidoService {
 
 	@Autowired
 	private PedidoRepository repository;
+	
 	@Autowired
 	private BoletoService boletoService;
+	
 	@Autowired
 	private PagamentoRepository pagamentoRepository;
+	
 	@Autowired
 	private ProdutoService produtoService;
+	
 	@Autowired
 	private ItemPedidoRepository itemPedidoRepository;
+	
+	@Autowired
+	private ClienteService clienteService;
+	
+	@Autowired
+	private EmailService emailService;
+	
 
 	public Pedido find(Integer id) {
 		Optional<Pedido> obj = repository.findById(id);
@@ -41,6 +58,7 @@ public class PedidoService {
 
 		obj.setId(null);
 		obj.setInstante(new Date());
+		obj.setCliente(clienteService.find(obj.getCliente().getId()));
 		obj.getPagamento().setEstadoPagamento(EstadoPagamento.PENDENTE);
 		obj.getPagamento().setPedido(obj);
 		if (obj.getPagamento() instanceof PagamentoComBoleto) {
@@ -51,14 +69,24 @@ public class PedidoService {
 		pagamentoRepository.save(obj.getPagamento());
 		for (ItemPedido ip : obj.getItens()) {
 			ip.setDisconto(0.0);
-			ip.setPreco(produtoService.find(ip.getProduto().getId()).getPreco());
+			ip.setProduto(produtoService.find(ip.getProduto().getId()));
+			ip.setPreco(ip.getProduto().getPreco());
 			ip.setPedido(obj);
 		}
 
 		itemPedidoRepository.saveAll(obj.getItens());
-
+        emailService.sendOrderConfirmationEmail(obj);
 		return obj;
-
+	}
+	
+	public Page<Pedido> findPage(Integer page, Integer linesPerPage, String orderBy, String direction) {
+		UserSS user = UserService.authenticated();
+		if (user == null) {
+			throw new AuthorizationException("Acesso negado");
+		}
+		PageRequest pageRequest = PageRequest.of(page, linesPerPage, Direction.valueOf(direction), orderBy);
+		Cliente cliente =  clienteService.find(user.getId());
+		return repository.findByCliente(cliente, pageRequest);
 	}
 
 }
